@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Drift</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #controls, #effects {
+            position: absolute;
+            top: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls { left: 10px; }
+        #effects { right: 10px; }
+        input { margin: 5px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div id="controls">
+        <label>Speed: <input type="range" id="speed" min="0.5" max="10" step="0.1" value="2"></label><br>
+        <label>Size: <input type="range" id="size" min="1" max="10" step="0.1" value="5"></label><br>
+        <label>Color: <input type="color" id="color" value="#ffcc00"></label>
+    </div>
+
+    <div id="effects">
+        <label><input type="checkbox" id="trail"> Particle Trails</label><br>
+        <label><input type="checkbox" id="gravity"> Gravity Effect</label><br>
+        <label><input type="checkbox" id="repulsion"> Repulsion Effect</label><br>
+        <label><input type="checkbox" id="colorShift"> Color Shift</label><br>
+        <label><input type="checkbox" id="explosion"> Explosion Effect</label>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        const maxParticles = 200;
+        let mouse = { x: canvas.width / 2, y: canvas.height / 2, moved: false };
+
+        const speedControl = document.getElementById("speed");
+        const sizeControl = document.getElementById("size");
+        const colorControl = document.getElementById("color");
+
+        const trailEffect = document.getElementById("trail");
+        const gravityEffect = document.getElementById("gravity");
+        const repulsionEffect = document.getElementById("repulsion");
+        const colorShiftEffect = document.getElementById("colorShift");
+        const explosionEffect = document.getElementById("explosion");
+
+        class Particle {
+            constructor(x, y, vx = (Math.random() - 0.5) * 3, vy = (Math.random() - 0.5) * 3) {
+                this.x = x;
+                this.y = y;
+                this.size = parseFloat(sizeControl.value);
+                this.speed = parseFloat(speedControl.value);
+                this.color = colorControl.value;
+                this.life = 100;
+                this.vx = vx;
+                this.vy = vy;
+                this.glow = false;
+            }
+
+            update() {
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (repulsionEffect.checked && distance < 100) {
+                    this.vx -= (dx / distance) * 0.2;
+                    this.vy -= (dy / distance) * 0.2;
+                } else if (distance > 1) {
+                    this.vx += (dx / distance) * 0.05;
+                    this.vy += (dy / distance) * 0.05;
+                }
+
+                if (gravityEffect.checked) {
+                    this.vy += 0.05;
+                    this.vx *= 0.99;
+                }
+
+                this.x += this.vx * this.speed;
+                this.y += this.vy * this.speed;
+
+                this.vx *= 0.95;
+                this.vy *= 0.95;
+                this.life -= 1;
+
+                if (colorShiftEffect.checked) {
+                    let hue = (Date.now() / 10) % 360;
+                    this.color = `hsl(${hue}, 100%, 50%)`;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.life / 100;
+                
+                if (this.glow) {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = this.color;
+                } else {
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function updateParticles() {
+            ctx.fillStyle = `rgba(17, 17, 17, ${trailEffect.checked ? 0.05 : 1})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (mouse.moved && particles.length < maxParticles) {
+                particles.push(new Particle(mouse.x, mouse.y));
+            }
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            particles = particles.filter(p => p.life > 0);
+
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(updateParticles);
+            } else {
+                requestAnimationFrame(updateParticles);
+            }
+        }
+
+        canvas.addEventListener("mousemove", (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.moved = true;
+        });
+
+        canvas.addEventListener("click", (e) => {
+            if (explosionEffect.checked) {
+                let numParticles = Math.floor(Math.random() * 30) + 20;
+                for (let i = 0; i < numParticles; i++) {
+                    let p = new Particle(e.clientX, e.clientY, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5);
+                    p.glow = true;
+                    particles.push(p);
+                }
+            }
+        });
+
+        canvas.addEventListener("touchmove", (e) => {
+            for (let i = 0; i < Math.min(e.touches.length, 5); i++) {
+                let touch = e.touches[i];
+                mouse.x = touch.clientX;
+                mouse.y = touch.clientY;
+                mouse.moved = true;
+                particles.push(new Particle(touch.clientX, touch.clientY));
+            }
+        });
+
+        function updateSettings() {
+            particles.forEach(p => {
+                p.size = parseFloat(sizeControl.value);
+                p.speed = parseFloat(speedControl.value);
+                p.color = colorControl.value;
+            });
+        }
+
+        speedControl.addEventListener("input", updateSettings);
+        sizeControl.addEventListener("input", updateSettings);
+        colorControl.addEventListener("input", updateSettings);
+
+        window.addEventListener("resize", () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        updateParticles();
+    </script>
+</body>
+</html>
